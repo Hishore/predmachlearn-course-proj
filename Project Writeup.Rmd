@@ -1,0 +1,94 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Carolyn"
+date: "Sunday, September 27, 2015"
+output: html_document
+---
+
+Download data. To be consistant, making all blank fields NA.
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "pml-training")
+pmlTraining<-read.csv("pml-training")
+pmlTraining[pmlTraining==""] <- NA
+```
+
+Create training and testing sets. For reproducibility, we set seed to 1.
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+library(caret)
+set.seed(1)
+inTrain <- createDataPartition(y=pmlTraining$classe,
+                              p=0.7, list=FALSE)
+training <- pmlTraining[inTrain,]
+testing <- pmlTraining[-inTrain,]
+dim(training); dim(testing)
+```
+
+Let's do some exploratory analysis and take a look at the columns.
+
+```{r}
+colnames(pmlTraining)
+```
+
+We notice that the first several columns are not useful in prediction, let's delete them.
+
+```{r, cache=TRUE}
+training<-training[,8:160]
+testing<-testing[,8:160]
+```
+
+Also notice there are many missing values.
+
+```{r, cache=TRUE}
+missing<-is.na(training)
+missingCol<-apply(missing,2,sum)
+summary(missingCol)
+```
+
+We can see that many columns are missing 13450 records. Let's delete these columns from both the training and testing datasets.
+
+```{r, cache=TRUE}
+keep<-missingCol!=max(missingCol)
+training<-training[,keep]
+testing<-testing[,keep]
+```
+
+First, let's try predicting with Trees.
+
+```{r, cache=TRUE, message=FALSE}
+modTrees <- train(classe ~ .,method="rpart",data=training)
+print(modTrees$finalModel)
+```
+
+Plot tree.
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+library(rattle)
+fancyRpartPlot(modTrees$finalModel, tweak=1.2, sub='Fancy Tree Plot')
+```
+
+Predicting new values
+
+```{r, cache=TRUE}
+predTrees <- predict(modTrees,testing)
+table(predTrees,testing$classe)
+```
+
+We can see that the accuracy is pretty low at around (1510+389+528+463)/5885=49%, let's use random forest instead. We add the argument trainControl(method = "cv") in the train function to request the train funciton to do cross validation using the random forest method.
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+modRF <- train(classe ~ .,method="rf",data=training,trControl = trainControl(method = "cv"))
+modRF
+```
+
+Prediction on the testing dataset.
+
+```{r, cache=TRUE}
+predRF <- predict(modRF,testing)
+table(predRF,testing$classe)
+```
+
+We can see the that the accuracy for this testing dataset is (1673+1136+1018+954+1080)/5885=99.6%. So an estimate of the out of sample error rate is 1-99.6% = 0.4%, which is a very good result.
+
+To conclude, we will choose the random forest model modRF to predict 20 different test cases.
